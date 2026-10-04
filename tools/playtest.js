@@ -156,8 +156,10 @@ function serveEmbed(gameUrl) {
  * first launch and passed again without it (Chromium keeps the last --disable-features). With
  * --touch the cross-site frame also shares the page's process, as on Android, where Chrome only
  * isolates sites people log in to. (Headless Chromium also drops the click from a synthesized
- * touch tap in an out-of-process frame, though pointer events get through.) With the mouse it
- * stays out-of-process, as in desktop Chrome. */
+ * touch tap in an out-of-process frame, though pointer events get through.) With the mouse the
+ * browser decides: full Chromium puts the frame in its own process, as desktop Chrome does, while
+ * Playwright's headless shell (its default, and what CI runs) keeps it in the page's. The first
+ * line of output says which. */
 async function launchBrowser() {
   const opts = fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {};
   if (!FRAME) return chromium.launch(opts);

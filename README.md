@@ -47,8 +47,9 @@ app needs no internet permission. The hardware back button leaves a heist
 clock and the sound, the screen stays on while you plan, and the system bars
 stay hidden until swiped in.
 
-**Get the APK.** Every push builds it in GitHub Actions (workflow *Android
-APK*, artifact `time-moves-when-you-draw-apk`). Pushing a `v*` tag also
+**Get the APK.** Every push that changes the game, the app or `tools/`
+builds it in GitHub Actions (workflow *Android APK*, artifact
+`time-moves-when-you-draw-apk`). Pushing a `v*` tag also
 attaches it to a GitHub release. On the phone, open the `.apk` and allow
 installs from that source.
 
@@ -92,14 +93,15 @@ covers the files.
 ```sh
 npm run build:web    # → dist/web/ and dist/time-moves-when-you-draw-web-<version>.zip
 npm run playtest:web # build, then play every heist inside a 450 × 800 iframe
+                     # (needs Playwright: npm ci && npx playwright install chromium)
 ```
 
 The build is `index.html`, `js/` and `fonts/`, with one change: scripts,
 stylesheet and fonts are linked as `file?v=<hash>`, because itch.io caches
 them for a month and only refreshes `index.html`. It stops with an error if
 itch.io would reject or break the build (index.html not at the root, over
-1,000 files, paths over 240 characters, absolute or wrong-case links,
-anything loaded from another server). The zip is reproducible: same sources,
+1,000 files, paths over 240 characters, absolute, missing or wrong-case
+links, anything loaded from another server). The zip is reproducible: same sources,
 same bytes. `--iframe 450x800` plays the game the way itch.io embeds it: in a
 frame of that size on a page from another origin, behind a "Run game" click,
 with itch's fullscreen button over the corner.
@@ -108,6 +110,7 @@ with itch's fullscreen button over the corner.
 upload the zip and tick *This file will be played in the browser*. Embed it
 at 450 × 800 with *Mobile friendly* on (Portrait), the fullscreen button on,
 and click to launch. Add `time-moves-when-you-draw-<version>.apk` (from the
+GitHub release, or inside the zip GitHub gives you for the
 `time-moves-when-you-draw-apk` artifact) as a second file with only
 *Android* ticked.
 
@@ -122,14 +125,20 @@ version. To turn it on:
    to HTML, and keep it a draft. Don't also upload a zip by hand; if you
    did, delete it so the butler upload is the one that plays.
 2. Get an API key: run `butler login` once on your computer and copy the key
-   from `~/.config/itch/butler_creds`, or copy the `wharf` key from
+   from `butler_creds` (Linux `~/.config/itch/`, macOS
+   `~/Library/Application Support/itch/`, Windows
+   `%USERPROFILE%\.config\itch\`), or copy the `wharf` key from
    [itch.io/user/settings/api-keys](https://itch.io/user/settings/api-keys).
+   Paste it without a trailing newline; if it ever shows up in a log, revoke
+   it there.
 3. In the GitHub repo, *Settings → Secrets and variables → Actions*: add the
    secret `BUTLER_API_KEY`, and the variable `ITCH_GAME` set to
    `<itch-username>/time-moves-when-you-draw` (the page's address is
    `https://<itch-username>.itch.io/time-moves-when-you-draw`).
-4. Bump the version in `package.json` and push a matching tag:
-   `git tag v1.0.0 && git push origin v1.0.0`.
+4. Push a tag that matches the version in `package.json` (bump it there
+   first for every later release): `git tag v1.0.0 && git push origin v1.0.0`.
+   Or start the workflow by hand: *Actions → Android APK → Run workflow*,
+   which publishes whatever branch you pick.
 5. After the first push only: on the page's edit screen, tick *This file
    will be played in the browser* on the `html5` upload, then set up the
    embed as above. Later pushes to the same channel should keep it; check

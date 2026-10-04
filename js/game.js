@@ -1433,6 +1433,13 @@
     },
   };
 
+  // Inside another page's frame (itch.io embeds the game this way), keep clear of the host's overlay buttons.
+  try {
+    if (window.self !== window.top) document.documentElement.classList.add('embedded');
+  } catch (e) {
+    document.documentElement.classList.add('embedded'); // a cross-origin parent can refuse the check; that means framed too
+  }
+
   syncSound();
   renderMenu();
   resize();

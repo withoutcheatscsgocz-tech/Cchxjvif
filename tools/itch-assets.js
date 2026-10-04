@@ -4,7 +4,9 @@
  *
  *   itch/cover.png                630 x 500    cover and browse thumbnail (itch: 315:250,
  *                                              630 x 500 recommended)
- *   itch/banner.png               960 x 280    page banner; it replaces the page title
+ *   itch/banner.png              1920 x 560    page banner; it replaces the page title. itch
+ *                                              shows it at max-width 100% of the 960 px
+ *                                              column, so it's drawn at 2x for sharp type
  *   itch/screens/01-title.png     900 x 1600   phone screenshots: 450 x 800 CSS px at 2x,
  *   itch/screens/02-planning.png               the size of the itch.io embed
  *   itch/screens/03-busted.png
@@ -23,7 +25,8 @@
  * canvas. Output is deterministic, so re-running only changes files when the
  * game changed:
  *   - Playwright's fake clock drives requestAnimationFrame, timers and
- *     performance.now(), so frames don't depend on machine speed;
+ *     performance.now(), so frames don't depend on machine speed. It is paused
+ *     before the page loads and never runs in real time;
  *   - CSS animations and transitions are paused and seeked to the fake clock;
  *   - Math.random (the busted screen shake) is seeded.
  * Game time only depends on the distance drawn, so the input decides what the
@@ -31,8 +34,8 @@
  * own files is blocked, and the run fails if the page asks for one, logs an
  * error, or a title line spills out of its box.
  *
- * Needs Playwright, ffmpeg (for the GIF) and optionally ImageMagick's
- * `identify` (for the summary).
+ * Needs Playwright and ffmpeg (for the GIF). The run also fails if a file comes
+ * out at the wrong pixel size or over itch's 3 MB limit.
  */
 'use strict';
 
@@ -59,7 +62,7 @@ const SAVE_KEY = 'time-moves-when-you-draw/v1';
 const T0 = Date.UTC(2026, 0, 1); // the fake clock's epoch
 const LEAD = 16; // js/game.js: px of route the thief keeps in front of itself
 const MAX_BYTES = 3 * 1024 * 1024; // itch.io's limit for covers, screenshots and GIFs
-const COLORS = { paper: '#eceef1', plate: '#ffffff', line: '#d5d9df', ink: '#121317', soft: '#5b616b', red: '#e5202b', gold: '#f6c344' };
+const COLORS = { paper: '#eceef1', plate: '#ffffff', line: '#d5d9df', ink: '#121317', soft: '#5b616b', red: '#e5202b', gold: '#f0ad1c' }; // index.html :root
 const TAGLINE = 'A one-finger heist. The clock only runs while you draw.';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.txt': 'text/plain', '.png': 'image/png' };
 
@@ -240,6 +243,13 @@ class Game {
     const st = await this.state();
     if (st.mode !== 'play' || st.level !== i) throw new Error(`heist ${i + 1} did not start (${st.mode})`);
     await this.run(20);
+    // Starting a heist resizes (clears) the canvas; only the game's frame loop paints it again.
+    // A transparent canvas here means that loop has stalled and every picture would be blank.
+    const alpha = await this.page.evaluate(() => {
+      const c = document.getElementById('game');
+      return c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data[3];
+    });
+    if (alpha !== 255) throw new Error(`heist ${i + 1}: the game did not repaint its canvas (its frame loop stalled)`);
   }
 
   async shot(file, opts = {}) {
@@ -265,15 +275,21 @@ async function openGame(browser, origin, { width = 450, height = 800, dsf = 2, s
   const page = await context.newPage();
   watchErrors(page);
   await page.clock.install({ time: T0 });
+  // Paused before the page's first script runs. Letting the fake clock run in real time while
+  // the page loads and pausing afterwards is a race: a real-time tick still in flight when
+  // pauseAt() jumps ahead winds the clock back again, which leaves the game's
+  // requestAnimationFrame loop scheduled ~30 s in the future. The game then never repaints
+  // after a heist starts, and the capture comes out blank.
+  await page.clock.pauseAt(T0);
   await page.goto(`${origin}/index.html`);
   await page.evaluate(() => document.fonts.ready);
   const fontsOk = await page.evaluate(
     () => document.fonts.check('900 40px "Big Shoulders Display"') && document.fonts.check('600 14px "IBM Plex Mono"')
   );
   if (!fontsOk) throw new Error('bundled fonts did not load');
-  const loadedAt = await page.evaluate(() => Date.now());
-  if (loadedAt >= T0 + 30000) throw new Error('the page took over 30 s to load');
-  await page.clock.pauseAt(T0 + 30000); // from here on, time only moves when we say so
+  await page.clock.pauseAt(T0 + 30000); // the same starting point every time; time only moves when we say so
+  const now = await page.evaluate(() => Date.now());
+  if (now !== T0 + 30000) throw new Error(`the fake clock is at ${now - T0} ms, expected 30000`);
   await page.evaluate(() => window.__itch.start());
   const cdp = await context.newCDPSession(page);
   return new Game(context, page, cdp);
@@ -522,10 +538,14 @@ const COVER = {
   },
 };
 
-/* Banner, 960 x 280: the title on two lines and the tagline, beside a crop of the real map. */
+/* Banner, 960 x 280 CSS px at 2x: the title on two lines and the tagline, beside a crop of the
+   real map. itch serves the banner as uploaded and scales it to the page column
+   (.header.has_image img { max-width: 100% }), so 1920 x 560 shows as 960 x 280 on a
+   high-DPI screen instead of soft 1x type. */
 const BANNER = {
   w: 960,
   h: 280,
+  dsf: 2,
   panel: { x: 640, w: 320 },
   crop: { level: 7, t: 4, cx: 178, cy: 410, h: 236 },
   html(st) {
@@ -586,12 +606,25 @@ function checkLayout() {
   return [...new Set(problems)];
 }
 
+/* Pixel size from a PNG's IHDR or a GIF's logical screen descriptor. */
+function imageSize(buf) {
+  if (buf.length >= 24 && buf.readUInt32BE(0) === 0x89504e47) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf.length >= 10 && buf.toString('latin1', 0, 3) === 'GIF') return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) };
+  return null;
+}
+
 async function composition(browser, origin, spec, file) {
   const panelInner = { w: spec.panel.w - 6, h: spec.h }; // minus the 6 px ink rule
   const { png, st } = await crop(browser, origin, { ...spec.crop, aspect: panelInner.w / panelInner.h });
+  // The crop is only ever scaled down into the panel: an upscaled map would look soft.
+  const got = imageSize(png);
+  const need = { w: Math.ceil(panelInner.w * (spec.dsf || 1)), h: Math.ceil(panelInner.h * (spec.dsf || 1)) };
+  if (got.w < need.w || got.h < need.h) {
+    throw new Error(`${path.basename(file)}: the map crop is ${got.w} x ${got.h} px, the panel needs ${need.w} x ${need.h}`);
+  }
   virtual.set('/__itch/crop.png', { type: 'image/png', body: png });
   virtual.set('/__itch/page.html', { type: 'text/html', body: spec.html(st) });
-  const context = await browser.newContext({ viewport: { width: spec.w, height: spec.h }, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport: { width: spec.w, height: spec.h }, deviceScaleFactor: spec.dsf || 1 });
   await guardNetwork(context, origin);
   const pg = await context.newPage();
   watchErrors(pg);
@@ -681,12 +714,15 @@ async function gameplayGif(browser, origin, file, keepDir) {
   await hold(1.2 + GIF.replay);
   await g.close();
 
+  // Ordered (bayer) dither, so a still area is encoded the same in every frame and never
+  // shimmers. At bayer_scale 5 the flat paper and floor stay their exact colours; at
+  // lower scales the pattern speckles them with a visible crosshatch.
   execFileSync('ffmpeg', [
     '-v', 'error', '-y',
     '-framerate', String(GIF.fps), '-i', path.join(dir, 'f%04d.png'),
     '-vf',
     `scale=${GIF.outWidth}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=full[p];` +
-      '[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle',
+      '[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
     '-loop', '0', file,
   ]);
   if (!keepDir) fs.rmSync(dir, { recursive: true, force: true });
@@ -735,19 +771,28 @@ async function main() {
     server.close();
   }
 
+  // The pixel size each file must come out at. The cover must be exactly itch's 315:250,
+  // or itch crops it in the browse grid.
+  if (COVER.w * 250 !== COVER.h * 315) throw new Error(`the cover is ${COVER.w} x ${COVER.h}, not 315:250`);
+  const expected = (file) => {
+    const rel = path.relative(OUT, file);
+    if (rel === 'cover.png') return { w: COVER.w, h: COVER.h };
+    if (rel === 'banner.png') return { w: BANNER.w * BANNER.dsf, h: BANNER.h * BANNER.dsf };
+    if (rel === 'gameplay.gif') return { w: GIF.outWidth, h: Math.round((GIF.height * GIF.outWidth) / GIF.width) };
+    return { w: 900, h: 1600 }; // screens: the 450 x 800 embed at 2x
+  };
+
   let failed = blocked.length > 0 || pageErrors.length > 0;
   console.log('');
   for (const file of made) {
-    let dims = '';
-    try {
-      dims = execFileSync('identify', ['-format', '%wx%h ', file]).toString().trim().split(' ')[0];
-    } catch (e) {
-      /* identify is optional */
-    }
     const size = fs.statSync(file).size;
+    const got = imageSize(fs.readFileSync(file)) || { w: 0, h: 0 };
+    const want = expected(file);
     const big = size > MAX_BYTES;
-    failed = failed || big;
-    console.log(`${path.relative(ROOT, file).padEnd(34)} ${dims.padEnd(10)} ${(size / 1024).toFixed(0).padStart(5)} KB${big ? '  OVER 3 MB' : ''}`);
+    const wrong = got.w !== want.w || got.h !== want.h;
+    failed = failed || big || wrong;
+    const notes = [big && 'OVER 3 MB', wrong && `EXPECTED ${want.w}x${want.h}`].filter(Boolean).join(', ');
+    console.log(`${path.relative(ROOT, file).padEnd(34)} ${`${got.w}x${got.h}`.padEnd(10)} ${(size / 1024).toFixed(0).padStart(5)} KB${notes ? `  ${notes}` : ''}`);
   }
   if (blocked.length) console.log('Blocked requests:\n  ' + blocked.join('\n  '));
   if (pageErrors.length) console.log('Page errors:\n  ' + pageErrors.join('\n  '));

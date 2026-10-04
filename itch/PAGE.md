@@ -2,45 +2,45 @@
 
 ## Rychlý postup (česky)
 
-1. **Soubory.** `npm run build:web` vytvoří `dist/time-moves-when-you-draw-web-1.0.0.zip`. APK stáhni z GitHub Actions (artefakt `time-moves-when-you-draw-apk`, uvnitř je `time-moves-when-you-draw-1.0.0.apk`).
-2. **Nová stránka** na <https://itch.io/game/new>: název *Time Moves When You Draw*, adresa `time-moves-when-you-draw`, tagline z části „Short description“ níže, *Classification* = Games, *Kind of project* = **HTML**, *Release status* = Released, *Pricing* = No payments.
-3. **Nahrání.** ZIP nahraj a zaškrtni *This file will be played in the browser*. APK nahraj a zaškrtni jen *Android*. (Nebo to nech na CI přes butler, viz „Automatic uploads with butler“. Pak nic nenahrávej ručně.)
-4. **Embed:** *Embed in page*, 450 × 800, *Mobile friendly* zapnuto s orientací *Portrait*, *Fullscreen button* zapnuto, *Automatically start on page load* vypnuto.
+1. **Soubory.** `npm run build:web` vytvoří `dist/time-moves-when-you-draw-web-1.0.0.zip`. APK stáhni z GitHub Actions (artefakt `time-moves-when-you-draw-apk` je ZIP a uvnitř je `time-moves-when-you-draw-1.0.0.apk`).
+2. **Nová stránka** na <https://itch.io/game/new>: název *Time Moves When You Draw*, adresa `time-moves-when-you-draw`, tagline z části „Short description or tagline“ níže, *Classification* = Games, *Kind of project* = **HTML**, *Release status* = Released, *Pricing* = No payments.
+3. **Nahrání.** ZIP nahraj a zaškrtni *This file will be played in the browser*. APK nahraj, nastav typ *Executable*, zaškrtni jen *Android* a do pokynů k instalaci vlož text z části „Uploads“. (Nebo nahrávání nech na CI přes butler, viz „Automatic uploads with butler“. Pak ručně nenahrávej nic.)
+4. **Embed:** *Embed in page*, 450 × 800, *Mobile friendly* zapnuto s orientací *Portrait*, *Fullscreen button* zapnuto, *Automatically start on page load* vypnuto, *Enable scrollbars* vypnuto, *SharedArrayBuffer support* vypnuto.
 5. **Popis:** v editoru popisu přepni na HTML (tlačítko `<>`) a vlož celý obsah `itch/description.html`. Zpátky do běžného editoru už nepřepínej. *Genre* = Puzzle, 10 tagů ze seznamu níže.
-6. **Generative AI disclosure:** **Yes** a zaškrtni Code, Graphics, Text & Dialog a Sound.
-7. **Obrázky:** cover `itch/cover.png`, screenshoty `itch/gameplay.gif` a `itch/screens/*.png`. Po uložení otevři *Edit theme*: barvy a fonty podle části „Theme“, banner `itch/banner.png`, *Layout → Screenshots* = Sidebar.
+6. **Generative AI disclosure:** **Yes** a zaškrtni Code, Graphics, Text & Dialog a Sound. **Metadata:** English, Touchscreen + Mouse, A few minutes a odkaz na zdrojový kód (tabulka „Metadata“).
+7. **Obrázky:** cover `itch/cover.png`, screenshoty `itch/gameplay.gif` a `itch/screens/*.png` v pořadí z části „Media“. Po uložení otevři *Edit theme*: barvy a fonty podle části „2. Edit theme“, banner `itch/banner.png`, *Layout → Screenshots* = Sidebar.
 8. **Test a zveřejnění.** Stránku nech jako **Draft**, ulož ji a otevři tajný odkaz na počítači i na telefonu. Projdi kontrolní seznam na konci. Až pak přepni *Visibility* na **Public**. Zveřejni jen jednou, až bude vše hotové: do seznamu „Most Recent“ se hra dostane jen napoprvé.
 
 ---
 
-Everything below follows the itch.io edit form from top to bottom. `<itch-username>` stands for your itch.io account name, so the page will live at `https://<itch-username>.itch.io/time-moves-when-you-draw`.
+Everything below follows the itch.io edit form roughly from top to bottom; itch moves fields around now and then, so go by the field names. `<itch-username>` stands for your itch.io account name, so the page will live at `https://<itch-username>.itch.io/time-moves-when-you-draw`.
 
 ## Before you start: the files
 
 | File | What it is | Where it comes from |
 | --- | --- | --- |
-| `dist/time-moves-when-you-draw-web-1.0.0.zip` | Browser build, `index.html` at the zip root, 14 files, about 150 KB | `npm run build:web` (or `npm run playtest:web` to build it and play every heist in a 450 × 800 itch-style frame). CI also keeps it as the artifact `time-moves-when-you-draw-web` on `v*` tags and manual runs. |
+| `dist/time-moves-when-you-draw-web-1.0.0.zip` | Browser build, `index.html` at the zip root, 14 files, about 150 KB | `npm run build:web` (or `npm run playtest:web` to build it and play every heist in a 450 × 800 itch-style frame; that needs `npm ci` and `npx playwright install chromium` first). CI also keeps it as the artifact `time-moves-when-you-draw-web` on `v*` tags and manual runs. |
 | `dist/time-moves-when-you-draw-1.0.0.apk` | Android app, about 170 KB, Android 8.0+ | GitHub Actions, workflow *Android APK*, artifact `time-moves-when-you-draw-apk` (a zip; the APK is inside). A `v*` tag also attaches it to a GitHub release. Building locally gives `android/app/build/outputs/apk/release/app-release.apk`; rename it. |
 | `itch/cover.png` | Cover, 630 × 500 (exactly 315:250) | in the repo |
-| `itch/banner.png` | Page banner, 960 × 280, contains the title | in the repo |
-| `itch/gameplay.gif` | One heist: drawn, frozen, escaped, replayed. Under 3 MB | in the repo |
+| `itch/banner.png` | Page banner with the title. The file is 1920 × 560 (2× for sharp text); itch shows it at 960 × 280, the width of its page column | in the repo |
+| `itch/gameplay.gif` | Heist 3, Blind Spots: drawn, frozen, escaped, replayed. 360 × 672, about 2 MB. The grey finger dot and the caption bar under the map were added for the GIF and are not part of the game. | in the repo |
 | `itch/screens/01-title.png` … `05-escape-replay.png` | Five portrait screenshots, 900 × 1600 (the 450 × 800 embed at 2×) | in the repo |
 | `itch/description.html` | The page description, paste-ready | in the repo |
 | `itch/devlog-launch.md` | The launch devlog post | in the repo |
 
-`tools/itch-assets.js` regenerates every image from the real game if the game changes.
+If the game changes, `node tools/itch-assets.js` renders every image again from the real game (it needs Playwright and ffmpeg).
 
 Pick **one** upload route and stick to it: by hand (the *Uploads* step below) or with butler from CI (see [Automatic uploads with butler](#automatic-uploads-with-butler)). If both exist, an old hand-made upload can be the one that plays.
 
 ## 1. Create the page
 
-Go to <https://itch.io/game/new>. The fields, in the order the form shows them:
+Go to <https://itch.io/game/new>. The fields, roughly in the order the form shows them:
 
 ### Title
 
 `Time Moves When You Draw`
 
-Search on itch.io works best on the exact title, and this one is not a single common word, which is good for being found.
+itch's search is built around project titles, and itch warns that a title made of a single letter or a single common word is hard to find. This one is neither.
 
 ### Project URL
 
@@ -90,9 +90,9 @@ Skip this step if CI uploads with butler.
    A newer version installs over the old one and keeps your stars.
    ```
 
-The last sentence holds while every build is signed with the same key. CI and local builds use the committed `android/app/debug.keystore`. If you ever switch to your own release key (the `ANDROID_KEYSTORE_BASE64` secret and the three that go with it), the key changes: players must uninstall the old app first, and they lose their stars. Pick a key before you share builds widely (README, *Signing*).
+The last sentence holds while every build is signed with the same key. CI and local builds use the committed `android/app/debug.keystore`. If you ever switch to your own release key (the `ANDROID_KEYSTORE_BASE64` secret and the three that go with it), the key changes: players must uninstall the old app first, and uninstalling deletes their stars. Pick a key before you share builds widely (README, *Signing*).
 
-Google has announced developer verification for apps installed outside the Play Store. It starts on 30 September 2026 in Brazil, Indonesia, Singapore and Thailand and is planned to apply worldwide in 2027. Check <https://developer.android.com/developer-verification> before you rely on sideloading for the long term.
+Google has announced developer verification for Android apps, including ones installed from outside the Play Store. According to Google it began on 30 September 2026 in Brazil, Indonesia, Singapore and Thailand and is planned to apply worldwide from 2027. Check <https://developer.android.com/developer-verification> before you rely on sideloading for the long term.
 
 ### Embed options
 
@@ -104,17 +104,17 @@ These appear because the kind is HTML.
 | Viewport dimensions | **450 × 800** | A portrait phone shape, the size the screenshots and the playtest use. |
 | Mobile friendly | **On**, Orientation **Portrait** | The game is built for phones: it resizes to the window and uses touch. Phones always get "click to launch in fullscreen", locked to portrait where the browser allows it. |
 | Automatically start on page load | **Off** (click to launch) | With auto-start, some browsers mute the audio. |
-| Fullscreen button | **On** | An 800 px frame doesn't fit on a 720–768 px laptop screen. The button sits over the bottom-right corner of the game and overlaps 15 × 20 px of the "Heists" button on the result sheet. `tools/playtest.js --iframe 450x800` checks that every result button stays tappable. |
+| Fullscreen button | **On** | An 800 px frame doesn't fit in a browser window on a 720–768 px laptop screen. itch's button sits over the bottom-right corner of the game. When the game runs inside a frame, it moves its result buttons (escaped and busted) 32 px in from the right, so nothing sits under that button. `tools/playtest.js --iframe 450x800` checks that the result buttons stay tappable. |
 | Enable scrollbars | **Off** | The heist list scrolls inside the game. |
-| SharedArrayBuffer support | **Off** | The game doesn't need it. Turning it on later moves the game to another domain, and every player loses their stars. |
+| SharedArrayBuffer support | **Off** | The game doesn't need it. Turning it on later moves the game to another domain, and the stars players saved so far stay behind on the old one. |
 
 ### Details
 
-**Description.** In the description editor, click the **`<>`** button to switch to HTML mode, select everything in it, and paste the whole of `itch/description.html`. Don't switch back to the rich-text view afterwards, because that can rewrite or strip the markup. The file only uses tags itch keeps: `h2`, `p`, `strong`, `ul`, `ol`, `li` and `a`. It has no images, classes or styles. Use preview to check that the six `h2` section titles look like itch's own section headers.
+**Description.** In the description editor, click the **`<>`** button to switch to HTML mode, select everything in it, and paste the whole of `itch/description.html`. Don't switch back to the rich-text view afterwards, because that can rewrite or strip the markup. The file only uses tags that survive on live itch pages: `h2`, `p`, `strong`, `ul`, `ol`, `li` and `a`. It has no images, classes or styles. After saving, open the page and check that the six `h2` section titles look like itch's own section headers.
 
 **Genre.** **Puzzle**. The game is route planning with time stopped, which matches itch's description of Puzzle ("critical thinking to solve levels") better than Action.
 
-**Tags.** Use all 10 slots. Type each one and pick it from the suggestions:
+**Tags.** Use all 10 slots. Type each one; all but `time-manipulation` appear in itch's suggestions:
 
 | Tag | Why it fits |
 | --- | --- |
@@ -127,7 +127,7 @@ These appear because the kind is HTML.
 | Short | 8 heists, one sitting. |
 | Touch-Friendly | Built for one finger. |
 | Tactical | Every move is planned with time frozen. |
-| time-manipulation | The core mechanic. Free-form, but it is what people who want this kind of game search for. |
+| time-manipulation | The core mechanic. It is a free-form tag, not one of itch's suggested ones, and few games use it (55 when checked). Tags only feed itch's browse pages, not its search. |
 
 If you'd rather use only itch's suggested tags, swap `time-manipulation` for **Crime**. Don't add: *Puzzle* (it's already the genre), *superhot* (another game's name), *Time Travel* (a different mechanic), *mobile*, the game's own title, or any *AI* tag. The AI disclosure below adds those tags itself. Unrelated tags can get a page removed from browse.
 
@@ -140,11 +140,11 @@ If you'd rather use only itch's suggested tags, swap `time-manipulation` for **C
 Answer **Yes**, then tick:
 
 - **Code**: the game, the solver, the playtest bot and the Android shell were written with Claude, Anthropic's AI assistant.
-- **Graphics**: everything on screen is drawn by that code, and the cover, banner and screenshots are rendered from the game by `tools/itch-assets.js`. No image-generation model was used, but itch doesn't say whether art drawn by AI-written code counts, so ticking it is the safe reading.
+- **Graphics**: everything on screen is drawn by that code, and the cover, banner and screenshots are rendered from the game by `tools/itch-assets.js`. No image-generation model was used.
 - **Text & Dialog**: the in-game text, the level hints, the page description and the devlog.
-- **Sound**: synthesized live by AI-written code. No audio files and no audio model, but the same reasoning applies.
+- **Sound**: synthesized live by AI-written code. No audio files and no audio model.
 
-itch asks for accurate tagging. Disclosing a little more than strictly needed is safe; disclosing too little can get a page delisted. The page will show an "AI Disclosure" row in its *More information* panel and appear on itch's AI-assisted browse page. itch also asks that AI use is stated in the description itself: `description.html` says so under *Credits*. If you want to add your own part (for example direction or playtesting), add it there in your own words, and only what is true.
+itch asks every project to tag its AI use accurately, and says asset pages that don't can be delisted. It doesn't say whether art and sound drawn or synthesized by AI-written code count as AI graphics and sound, so ticking all four boxes is the cautious answer. The page will show an "AI Disclosure" row in its *More information* panel and appear on itch's AI-assisted browse page. itch also asks that AI use is stated in the description itself: `description.html` says so under *Credits*. If you want to add your own part (for example direction or playtesting), add it there in your own words, and only what is true.
 
 ### Metadata
 
@@ -164,20 +164,22 @@ Depending on itch's current layout, these fields are on the main form or on a se
 
 ### Media (right-hand column)
 
-**Cover image.** Upload `itch/cover.png`. It is 630 × 500, exactly itch's 315:250 ratio, so itch doesn't crop it in browse grids, and the title stays readable at thumbnail size. The cover is required: without one the page never shows up in browse or search.
+**Cover image.** Upload `itch/cover.png`. It is 630 × 500, exactly itch's 315:250 ratio, so itch doesn't crop it in browse grids. The title is still readable when it is scaled down to 315 × 250, and just about at the 110 × 87 thumbnail. The cover is required: without one the page never shows up in browse or search.
 
 **Gameplay video or trailer.** Leave empty. The field only takes YouTube, Vimeo or SketchFab links, and there is no video.
 
 **Screenshots.** Upload in this order:
 
-1. `itch/gameplay.gif`: the whole idea in motion. Put it first.
-2. `itch/screens/02-planning.png`: Crossfire, frozen mid-route.
+1. `itch/gameplay.gif`: Blind Spots from start to replay, so the rule is visible in motion. Put it first.
+2. `itch/screens/02-planning.png`: Crossfire, frozen mid-route at 9.60 s.
 3. `itch/screens/03-busted.png`: Night Shift, caught by a guard.
-4. `itch/screens/04-vault.png`: The Vault.
-5. `itch/screens/05-escape-replay.png`: three stars and the replay.
+4. `itch/screens/04-vault.png`: The Vault, frozen at 10.00 s.
+5. `itch/screens/05-escape-replay.png`: Eye in the Sky, escaped with three stars, replay running.
 6. `itch/screens/01-title.png`: the title screen.
 
-itch recommends 3 to 5 screenshots. If you want to stay within that, leave out `01-title.png`; it also serves as the embed's background (see *Theme*). Every file is under itch's 3 MB limit. Portrait images display fine: the sidebar fits them into 347 × 500 px.
+The ring with a stem in the screenshots marks where the finger is; like the GIF's finger dot, it was added for the pictures and is not part of the game.
+
+itch recommends 3 to 5 screenshots. If you want to stay within that, leave out `01-title.png`; it also serves as the embed's background (see *2. Edit theme*). Every file is under 3 MB, the limit itch staff have given for screenshots. Portrait images display fine: the sidebar fits them into 347 × 500 px.
 
 ### Community
 
@@ -195,7 +197,7 @@ Open the saved page and click **Edit theme**.
 
 **Layout → Screenshots: Sidebar.** The default, *Auto*, hides the screenshot column on pages with a game embed, so without this change nobody sees the screenshots.
 
-**Banner:** upload `itch/banner.png` (960 × 280, the width of itch's page column). It replaces the title text above the description, and it contains the title, so nothing is lost. Its background is the game's paper colour, `#eceef1`, so it blends into the column below.
+**Banner:** upload `itch/banner.png`. itch shows it at 960 × 280, the full width of its page column. It replaces the title text above the description, and it contains the title, so nothing is lost. Its background is the game's paper colour, `#eceef1`, so it blends into the column below.
 
 **Colours**, from the game's own palette:
 
@@ -210,6 +212,8 @@ Open the saved page and click **Edit theme**.
 
 For a framed look instead, set BG to `#121317` and keep BG2 at `#eceef1`.
 
+The link red `#e5202b` on `#eceef1` has a contrast of about 4:1, a little under the 4.5:1 that WCAG asks for body text. If you want links easier to read, use the game's darker red `#a5121b` (about 6.7:1).
+
 **Fonts:** Headers **Big Shoulders Display**, Body **IBM Plex Mono**. These are the game's own fonts, and itch offers every Google Font in its font lists. Google Fonts now files the first one under the family name **Big Shoulders**, so pick whichever of the two names the list shows. If neither is offered, the closest stand-ins are *Oswald* for headers and *Space Mono* for body text.
 
 **Embed / Run game placeholder:** set the background image behind the "Run game" button to `itch/screens/01-title.png`, so the frame looks like the game before it starts. Leave the gradient overlay off.
@@ -222,13 +226,13 @@ Open the draft's secret link while logged out (or in another browser).
 
 **Desktop**
 
-- Click **Run game**. The title screen appears. Sound plays once you click inside the game.
+- Click **Run game**. The title screen appears. It is silent; sound starts once you open a heist.
 - Scroll down inside the game to reach the heist list. At 450 × 800 the title fills the first screen, so the heists start below it.
 - Play heist 1. The clock runs only while you drag.
-- Finish it. The result sheet's Retry, Next and Heists buttons all respond, including "Heists" next to itch's fullscreen button.
+- Finish it. The escape sheet's Retry, Next and Heists buttons all respond, and itch's fullscreen button sits to the right of "Heists", not on it. Get caught once and check the busted sheet's buttons too.
 - Click into the game, then try R, Esc and Enter.
 - Try the fullscreen button. In browser fullscreen, Esc leaves fullscreen first.
-- Reload the page. Your stars are still there.
+- Reload the page. Your stars are still there (in a browser with default privacy settings).
 
 **Android phone (Chrome)**
 
@@ -247,7 +251,7 @@ Open the draft's secret link while logged out (or in another browser).
 When every box in the checklist below is ticked, set **Visibility & access** to **Public** and save.
 
 - **Publish once, when it's ready.** The first time a page goes public, it enters itch's *Most Recent* list. That can't happen a second time.
-- **New accounts get reviewed.** A first project usually waits in a review queue for a few business days before it shows in browse and search. The page works by its link the whole time. Traffic from outside itch moves it up the queue, so share the link off-site right away. Don't delete and recreate the page. Contact support only after at least a day.
+- **New accounts get reviewed.** A first project usually waits in a review queue before it shows in browse and search; itch says this generally takes a few business days. The page works by its link the whole time. Traffic from outside itch moves it up the queue, so share the link off-site right away. Don't delete and recreate the page. Contact support only after at least a day.
 - **Announce it.** Post `itch/devlog-launch.md` as a devlog with the type **Major Update or Launch**; itch may promote it, and recently updated games get a boost in browse. Announce it on the [Release Announcements board](https://itch.io/board/10022/release-announcements), not in other games' comments.
 
 ## Automatic uploads with butler
@@ -255,9 +259,9 @@ When every box in the checklist below is ticked, set **Visibility & access** to 
 The *Android APK* workflow has an `itch` job that runs after the APK job on `v*` tags and manual runs. It builds the web version, plays every heist in a 450 × 800 itch-style frame, then uses butler to push `dist/web` to the **html5** channel and the APK to the **android** channel, both labelled with the `package.json` version. The README section *itch.io* has the details. In short:
 
 1. Create the page first (butler can't), with *Kind of project* = HTML, and keep it a draft. Upload nothing by hand. If you already did, delete that upload.
-2. Get an API key: run `butler login` once on your computer and copy the key from `~/.config/itch/butler_creds`, or copy the `wharf` key from <https://itch.io/user/settings/api-keys>. Paste it without a trailing newline. If the key ever appears in a log, revoke it there.
+2. Get an API key: run `butler login` once on your computer and copy the key from `butler_creds` (Linux `~/.config/itch/`, macOS `~/Library/Application Support/itch/`, Windows `%USERPROFILE%\.config\itch\`), or copy the `wharf` key from <https://itch.io/user/settings/api-keys>. Paste it without a trailing newline. If the key ever appears in a log, revoke it there.
 3. In the GitHub repository, *Settings → Secrets and variables → Actions*: add the **secret** `BUTLER_API_KEY` and the **variable** `ITCH_GAME` set to `<itch-username>/time-moves-when-you-draw`.
-4. Bump `version` in `package.json` and push a matching tag: `git tag v1.0.0 && git push origin v1.0.0`.
+4. Push a tag that matches `version` in `package.json`. For the first release that is already `1.0.0`: `git tag v1.0.0 && git push origin v1.0.0`. For later releases, raise `version` first, then tag. (Or start the workflow by hand from the *Actions* tab.)
 5. After the first push only: on the edit page, tick **This file will be played in the browser** on the `html5` upload and save. The `android` upload is tagged Android automatically from the channel name. Then set up the embed options as above.
 
 Until the secret and the variable exist, the job still builds and checks the web version and skips the upload with a notice. After the second release, check that the `html5` upload is still the one that plays.

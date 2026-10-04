@@ -78,7 +78,14 @@ function bust(from, ref) {
     return ref;
   }
   const [file, query] = ref.split(/(?=[?#])/);
-  const target = path.posix.normalize(path.posix.join(path.posix.dirname(from), decodeURIComponent(file)));
+  let decoded;
+  try {
+    decoded = decodeURIComponent(file);
+  } catch (e) {
+    problems.push(`${from} loads ${ref}: not a valid URL (bad % escape)`);
+    return ref;
+  }
+  const target = path.posix.normalize(path.posix.join(path.posix.dirname(from), decoded));
   if (!files.has(target)) {
     const other = [...files.keys()].find((k) => k.toLowerCase() === target.toLowerCase());
     problems.push(`${from} loads ${ref}: ${other ? `the file is ${other} (letter case differs)` : 'no such file in the build'}`);
@@ -87,13 +94,16 @@ function bust(from, ref) {
   return query ? ref : `${file}?v=${hash(files.get(target))}`;
 }
 
+// CSS url(...) references, in a stylesheet or in the page's own <style> blocks and style="" attributes.
+const cssUrls = (from, css) =>
+  css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (m, q, ref) => `url(${q}${bust(from, ref.trim())}${q})`);
+
 // Stylesheets first, so the page's link to fonts.css gets the hash of the rewritten file.
 const order = [...files.keys()].sort((a, b) => (a.endsWith('.css') ? 0 : 1) - (b.endsWith('.css') ? 0 : 1));
 for (const rel of order) {
   let text;
   if (rel.endsWith('.css')) {
-    text = files.get(rel).toString('utf8');
-    text = text.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (m, q, ref) => `url(${q}${bust(rel, ref.trim())}${q})`);
+    text = cssUrls(rel, files.get(rel).toString('utf8'));
   } else if (rel.endsWith('.html')) {
     text = files.get(rel).toString('utf8');
     // Only what the browser loads (scripts, stylesheets, icons, media); plain <a href> links are left alone.
@@ -101,6 +111,8 @@ for (const rel of order) {
       /(<(?:script|link|img|source|audio|video)\b[^>]*?\s(?:src|href)\s*=\s*)(["'])(.*?)\2/gi,
       (m, head, q, ref) => `${head}${q}${bust(rel, ref.trim())}${q}`
     );
+    text = text.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (m, open, css, close) => open + cssUrls(rel, css) + close);
+    text = text.replace(/(\sstyle\s*=\s*)(["'])(.*?)\2/gi, (m, head, q, css) => head + q + cssUrls(rel, css) + q);
   } else continue;
   files.set(rel, Buffer.from(text, 'utf8'));
 }
