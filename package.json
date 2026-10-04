@@ -1,0 +1,14 @@
+{
+  "name": "time-moves-when-you-draw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A one-finger heist where the clock only runs while you draw.",
+  "scripts": {
+    "solve": "node tools/solve.js",
+    "playtest": "node tools/playtest.js",
+    "test": "node tools/solve.js && node tools/playtest.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}

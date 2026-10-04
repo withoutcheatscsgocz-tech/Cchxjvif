@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Time Moves When You Draw</title>
+<meta name="description" content="A one-finger heist. Draw the thief's route; the clock only runs while you draw.">
+<meta name="theme-color" content="#eceef1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23121317'/%3E%3Cpath d='M3 12 Q6 3 13 4' stroke='%23e5202b' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: full-bleed play surface; a HUD rail on top, result sheets rise from the bottom.
+     One deliberate look (white world, red threat, black thief), so there is no dark variant. */
+  :root {
+    --paper: #eceef1;
+    --plate: #ffffff;
+    --line: #d5d9df;
+    --ink: #121317;
+    --ink-soft: #5b616b;
+    --red: #e5202b;
+    --gold: #f0ad1c;
+    --teal: #0fa596;
+    --font-display: 'Big Shoulders Display', Impact, 'Arial Narrow', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    color-scheme: light;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+
+  #app { position: fixed; inset: 0; overflow: hidden; background: var(--paper); }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    display: grid; grid-template-columns: 40px 1fr 40px 40px; align-items: center; gap: 8px;
+    padding: calc(var(--safe-top) + 8px) 12px 0;
+    pointer-events: none;
+  }
+  #hud button { pointer-events: auto; }
+  .sq {
+    width: 40px; height: 40px; border: 0; padding: 0;
+    display: grid; place-items: center;
+    background: var(--ink); color: var(--plate);
+  }
+  .sq svg { width: 20px; height: 20px; }
+  .sq .mute { display: none; }
+  .sq[aria-pressed="false"] .wave { display: none; }
+  .sq[aria-pressed="false"] .mute { display: inline; }
+  #hud-mid { display: grid; justify-items: center; gap: 2px; min-width: 0; }
+  #hud-level {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  }
+  #hud-clock { font-weight: 600; font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  #hud-clock small { font-size: 12px; font-weight: 400; color: var(--ink-soft); margin-left: 2px; }
+  #hud-meta { display: flex; gap: 10px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; align-items: center; }
+  #hud-flow { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-soft); min-width: 7.2em; }
+  #hud-flow i { width: 7px; height: 7px; background: var(--ink-soft); display: inline-block; }
+  #hud-flow.live { color: var(--red); }
+  #hud-flow.live i { background: var(--red); border-radius: 50%; }
+  #hud-loot b { color: #b67b05; font-weight: 600; }
+  #hud-gem { color: var(--line); }
+  #hud-gem.got { color: var(--teal); }
+
+  /* ---------- hint + flash ---------- */
+  #hint {
+    position: absolute; left: 50%; top: 96px; z-index: 2;
+    transform: translateX(-50%);
+    width: max-content; max-width: min(92vw, 380px);
+    padding: 10px 14px; background: var(--ink); color: var(--plate);
+    font-size: 12.5px; line-height: 1.45; text-align: center;
+    pointer-events: none; transition: opacity 0.4s, transform 0.4s;
+  }
+  #hint.gone { opacity: 0; transform: translate(-50%, -8px); }
+  #flash {
+    position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
+    pointer-events: none; text-align: center; padding: 0 16px;
+    font-family: var(--font-display); font-weight: 900; text-transform: uppercase;
+    font-size: clamp(64px, 25vw, 180px); line-height: 0.85; letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  #flash span { display: block; animation: slam 0.26s cubic-bezier(.2,.9,.3,1) both; }
+  #flash.red { color: var(--red); }
+  #flash small { display: block; font-size: 0.22em; letter-spacing: 0.3em; font-family: var(--font-mono); font-weight: 600; margin-bottom: 0.4em; }
+  @keyframes slam { from { transform: scale(1.35); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1); opacity: 1; } }
+
+  /* ---------- sheets (busted / results) ---------- */
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+    margin: 0 auto; max-width: 440px;
+    background: var(--plate); color: var(--ink);
+    padding: 18px 18px calc(var(--safe-bottom) + 18px);
+    box-shadow: 0 -1px 0 var(--line), 0 -18px 40px rgba(18, 19, 23, 0.12);
+    animation: rise 0.32s cubic-bezier(.2,.9,.3,1) both;
+    display: grid; gap: 14px;
+  }
+  @keyframes rise { from { transform: translateY(100%); } to { transform: none; } }
+  .sheet h2 {
+    margin: 0; font-family: var(--font-display); font-weight: 900; text-transform: uppercase;
+    font-size: 54px; line-height: 0.85; letter-spacing: -0.01em; text-wrap: balance;
+  }
+  #busted h2 { color: var(--red); }
+  .sheet .why { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    flex: 1 1 0; min-width: 0; min-height: 48px; padding: 0 16px; border: 0;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--font-display); font-weight: 900; font-size: 22px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .btn.primary { background: var(--ink); color: var(--plate); }
+  .btn.ghost { flex: 0 0 auto; background: transparent; box-shadow: inset 0 0 0 2px var(--line); font-size: 18px; }
+  .stars { display: flex; gap: 6px; }
+  .star { width: 34px; height: 34px; color: var(--line); }
+  .star.on { color: var(--ink); }
+  .star.on.pop { animation: pop 0.4s cubic-bezier(.2,1.6,.4,1) both; }
+  @keyframes pop { from { transform: scale(0.2) rotate(-30deg); } to { transform: none; } }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; font-size: 12.5px; }
+  .checks li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); min-width: 0; }
+  .checks li span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+  .checks .ok { color: var(--ink); font-weight: 600; }
+  .checks .no { color: var(--ink-soft); }
+  .replay-tag { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* ---------- menu ---------- */
+  #menu {
+    position: absolute; inset: 0; z-index: 5; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--paper);
+    padding: calc(var(--safe-top) + 18px) 16px calc(var(--safe-bottom) + 32px);
+  }
+  .menu-inner { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .menu-top { display: flex; justify-content: space-between; align-items: center; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-soft); }
+  .title {
+    margin: 0; font-family: var(--font-display); font-weight: 900; text-transform: uppercase;
+    font-size: clamp(64px, 24vw, 148px); line-height: 0.8; letter-spacing: -0.015em;
+    overflow: hidden;
+  }
+  .title span { display: block; width: max-content; padding: 0 0.04em; }
+  .title span:last-child { color: var(--red); }
+  @media (prefers-reduced-motion: no-preference) {
+    .title span { animation: beat 4s steps(1) infinite; }
+    .title span:nth-child(2) { animation-delay: 0.32s; }
+    .title span:nth-child(3) { animation-delay: 0.64s; }
+    .title span:nth-child(4) { animation-delay: 0.96s; }
+    .title span:nth-child(5) { animation-delay: 1.28s; }
+  }
+  @keyframes beat { 0% { background: var(--ink); color: var(--plate); } 8% { background: transparent; color: inherit; } }
+  .lede { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .steps li { display: grid; grid-template-columns: 44px 1fr; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .steps li b { font-family: var(--font-display); font-weight: 900; font-size: 22px; }
+  .steps li:last-child b { color: var(--red); }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .section-head h3 { margin: 0; font-family: var(--font-display); font-weight: 900; font-size: 30px; text-transform: uppercase; letter-spacing: 0.01em; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .card {
+    display: grid; gap: 6px; text-align: left; padding: 12px; min-height: 108px; border: 0;
+    background: var(--plate); color: var(--ink); align-content: start;
+  }
+  .card .n { font-family: var(--font-display); font-weight: 900; font-size: 40px; line-height: 0.85; }
+  .card .nm { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+  .card .meta { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .card .mini { display: flex; gap: 2px; }
+  .card .mini svg { width: 13px; height: 13px; color: var(--line); }
+  .card .mini svg.on { color: var(--ink); }
+  .card.next { box-shadow: inset 0 0 0 3px var(--ink); }
+  .card.next .n { color: var(--red); }
+  .card:disabled { cursor: default; background: transparent; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-soft); }
+  .card:disabled .n { color: var(--line); }
+  .foot { font-size: 11px; line-height: 1.6; color: var(--ink-soft); }
+
+  @media (min-width: 560px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game" aria-label="Heist map. Touch anywhere and drag to draw the route."></canvas>
+
+  <header id="hud" hidden>
+    <button class="sq" id="btn-menu" type="button" aria-label="Back to heists">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7"/><rect x="11" y="2" width="7" height="7"/><rect x="2" y="11" width="7" height="7"/><rect x="11" y="11" width="7" height="7"/></svg>
+    </button>
+    <div id="hud-mid">
+      <div id="hud-level">01 · The Lobby</div>
+      <div id="hud-clock"><span id="hud-time">0.00</span><small>s</small></div>
+      <div id="hud-meta">
+        <span id="hud-flow"><i></i><span id="hud-flow-label">frozen</span></span>
+        <span id="hud-loot">Gold <b id="hud-loot-n">0/1</b></span>
+        <span id="hud-gem">Gem</span>
+      </div>
+    </div>
+    <button class="sq" id="btn-sound" type="button" aria-label="Sound" aria-pressed="false">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h3l5-4v12l-5-4H3z" fill="currentColor" stroke="none"/><path class="wave" d="M14 7c1.2 1.6 1.2 4.4 0 6M16.5 5c2.3 2.8 2.3 7.2 0 10"/><path class="mute" d="M13.5 7.5l5 5M18.5 7.5l-5 5"/></svg>
+    </button>
+    <button class="sq" id="btn-restart" type="button" aria-label="Restart heist">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M15.5 10a5.5 5.5 0 1 1-1.8-4.1"/><path d="M14.5 2.5v4h-4" stroke-linejoin="miter"/></svg>
+    </button>
+  </header>
+
+  <div id="hint" class="gone"></div>
+  <div id="flash" aria-live="polite"></div>
+
+  <section id="busted" class="sheet" hidden>
+    <div class="head">
+      <h2>Busted</h2>
+      <span class="replay-tag" id="busted-time"></span>
+    </div>
+    <p class="why" id="busted-why"></p>
+    <div class="row">
+      <button class="btn primary" id="btn-retry" type="button">Retry</button>
+      <button class="btn ghost" id="btn-busted-menu" type="button">Heists</button>
+    </div>
+  </section>
+
+  <section id="results" class="sheet" hidden>
+    <div class="head">
+      <h2 id="results-title">Escaped</h2>
+      <div class="stars" id="results-stars"></div>
+    </div>
+    <ul class="checks" id="results-checks"></ul>
+    <div class="row">
+      <button class="btn" id="btn-again" type="button">Retry</button>
+      <button class="btn primary" id="btn-next" type="button">Next</button>
+      <button class="btn ghost" id="btn-results-menu" type="button">Heists</button>
+    </div>
+  </section>
+
+  <section id="menu">
+    <div class="menu-inner">
+      <div class="menu-top">
+        <span class="eyebrow">A one-finger heist</span>
+        <button class="sq" id="btn-sound-menu" type="button" aria-label="Sound" aria-pressed="false">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8h3l5-4v12l-5-4H3z" fill="currentColor" stroke="none"/><path class="wave" d="M14 7c1.2 1.6 1.2 4.4 0 6M16.5 5c2.3 2.8 2.3 7.2 0 10"/><path class="mute" d="M13.5 7.5l5 5M18.5 7.5l-5 5"/></svg>
+        </button>
+      </div>
+      <h1 class="title" aria-label="Time moves when you draw"><span>Time</span><span>moves</span><span>when</span><span>you</span><span>draw.</span></h1>
+      <p class="lede">Guards, cameras and lasers stand still until you move. Lift your finger and the whole building freezes. Plan the route, then take it.</p>
+      <ol class="steps">
+        <li><b>1</b><span>Touch anywhere. Below the thief keeps it in view.</span></li>
+        <li><b>2</b><span>Drag to draw the route. The thief walks it.</span></li>
+        <li><b>3</b><span>The clock runs only while you draw.</span></li>
+      </ol>
+      <div>
+        <div class="section-head"><h3>Heists</h3><span class="eyebrow" id="menu-stars">0 / 24 stars</span></div>
+        <div class="grid" id="menu-grid"></div>
+      </div>
+      <p class="foot">Stars: escape · grab the gem · beat par time. Every heist is checked solvable by tools/solve.js.<br>Keys: R restarts, Esc opens heists.</p>
+    </div>
+  </section>
+</div>
+
+<script src="js/sim.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
