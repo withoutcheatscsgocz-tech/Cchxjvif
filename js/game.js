@@ -1359,10 +1359,19 @@
   canvas.addEventListener('pointercancel', lift);
   canvas.addEventListener('lostpointercapture', lift);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  window.addEventListener('blur', () => {
-    if (!run) return;
-    run.drawing = false;
-    run.target = null;
+  /* Leaving the page (or the Android app) mid-drag must not leave the clock or the drone running. */
+  function pause() {
+    if (run) {
+      run.drawing = false;
+      run.pid = null;
+      run.target = null;
+    }
+    Sfx.flow(0);
+    Sfx.suspend();
+  }
+  window.addEventListener('blur', pause);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) pause();
   });
 
   window.addEventListener('keydown', (e) => {
@@ -1398,8 +1407,15 @@
     resize();
   });
 
-  // Read-only hooks for automated play-testing (tools/playtest.js). The game never uses them.
+  // Hooks for the Android shell (android/) and automated play-testing (tools/playtest.js).
   window.TMWYD = {
+    /* Hardware back: leave a heist for the heist list. Returns false on the menu so the app can close. */
+    back: () => {
+      if (mode === 'menu') return false;
+      goMenu();
+      return true;
+    },
+    pause,
     state: () => ({
       mode,
       level: L.index,

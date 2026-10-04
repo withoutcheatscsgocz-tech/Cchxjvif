@@ -1,0 +1,72 @@
+name: Android APK
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'fonts/**'
+      - 'android/**'
+      - 'tools/**'
+      - 'package.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach the APK to a GitHub release when a v* tag is pushed
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check every heist is beatable
+        run: node tools/solve.js
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          # Optional: set these repository secrets to sign with your own key instead of the shared debug key.
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export ANDROID_KEYSTORE="$RUNNER_TEMP/release.jks"
+          fi
+          ./gradlew --no-daemon assembleRelease
+          version=$(node -p "require('../package.json').version")
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk "../dist/time-moves-when-you-draw-$version.apk"
+
+      - name: Play every heist from inside the APK (touch, offline)
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          unzip -q dist/*.apk 'assets/web/*' -d "$RUNNER_TEMP/apk"
+          node tools/playtest.js --root "$RUNNER_TEMP/apk/assets/web" --touch
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: time-moves-when-you-draw-apk
+          path: dist/*.apk
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.apk

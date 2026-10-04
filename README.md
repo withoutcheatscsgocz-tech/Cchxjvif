@@ -36,6 +36,50 @@ from branch, root folder).
 - Keyboard: `R` restarts, `Esc` opens the heist list, `Enter` goes to the next
   heist from the results.
 
+## Android app
+
+`android/` wraps the same game in a tiny native app: one Activity with a
+full-screen WebView, no libraries, about 170 KB. The game files are copied
+into the APK at build time and served from
+`https://appassets.androidplatform.net/`, so progress saves normally and the
+app needs no internet permission. The hardware back button leaves a heist
+(and closes the app from the heist list), leaving the app mid-drag stops the
+clock and the sound, the screen stays on while you plan, and the system bars
+stay hidden until swiped in.
+
+**Get the APK.** Every push builds it in GitHub Actions (workflow *Android
+APK*, artifact `time-moves-when-you-draw-apk`). Pushing a `v*` tag also
+attaches it to a GitHub release. On the phone, open the `.apk` and allow
+installs from that source.
+
+**Build it yourself** (JDK 17+, Android SDK with platform 36):
+
+```sh
+cd android
+./gradlew assembleRelease     # → app/build/outputs/apk/release/app-release.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+The version comes from `package.json` (`1.2.3` → versionName 1.2.3,
+versionCode 10203), so bump it there before a release.
+
+**Signing.** Builds are signed with `android/app/debug.keystore`, which is
+committed on purpose (like React Native's template): it is not a secret, and
+sharing it means a new build always installs over the old one without losing
+saved stars. For a store release use your own key. Set `ANDROID_KEYSTORE`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`
+locally, or in CI add the repository secrets `ANDROID_KEYSTORE_BASE64`
+(`base64 -w0 release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`
+and `ANDROID_KEY_PASSWORD`. Apps signed with different keys can't update
+each other, so pick one before you share builds widely.
+
+To check the packaged game rather than the repo copy:
+
+```sh
+unzip -q app-release.apk 'assets/web/*' -d /tmp/apk
+node tools/playtest.js --root /tmp/apk/assets/web --touch
+```
+
 ## How it works
 
 ```
@@ -44,8 +88,11 @@ js/sim.js         the rules: map, collisions, sightlines, guard/camera/laser tim
 js/levels.js      the 8 heists (ASCII maps + patrol data)
 js/audio.js       synthesized sound (Web Audio, no files)
 js/game.js        input, game loop, canvas rendering, screens
+fonts/            Big Shoulders Display + IBM Plex Mono (OFL), bundled for offline play
+android/          the Android app (WebView shell, Gradle project)
 tools/solve.js    proves every heist is beatable and suggests par times
-tools/playtest.js plays every heist in headless Chromium along the solver's route
+tools/playtest.js plays every heist in headless Chromium along the solver's route,
+                  offline, with mouse or touch (--touch)
 ```
 
 Everything that can catch you is a **pure function of game time** (`sim.js`).

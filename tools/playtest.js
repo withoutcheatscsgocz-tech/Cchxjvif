@@ -8,8 +8,14 @@
  * length between route tiles equals the solver's time between them. Waiting
  * in place is done the way a player does it: by scribbling (tiny zig-zags).
  *
- *   node tools/playtest.js                 all heists
+ *   node tools/playtest.js                 all heists, mouse, desktop window
+ *   node tools/playtest.js --touch         phone emulation with real touch events
+ *   node tools/playtest.js --root DIR      play another copy of the game, e.g. the
+ *                                          assets/web/ folder unzipped from the APK
  *   node tools/playtest.js --shots out/    also save a screenshot per heist
+ *
+ * Every request that isn't the game's own files is blocked and reported, so a
+ * pass also proves the game runs offline (as it must inside the Android app).
  *
  * Needs Playwright (npm i -D playwright, or a global install).
  */
@@ -30,10 +36,18 @@ try {
   process.exit(2);
 }
 
-const ROOT = path.resolve(__dirname, '..');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const args = process.argv.slice(2);
-const shotsDir = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : null;
+const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null);
+const ROOT = path.resolve(opt('--root') || path.join(__dirname, '..'));
+const TOUCH = args.includes('--touch');
+const shotsDir = opt('--shots');
+const TYPES = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain',
+};
 
 function serve() {
   const server = http.createServer((req, res) => {
@@ -85,7 +99,31 @@ function penPath(L, route) {
   return { pts, dir };
 }
 
-async function playLevel(page, i) {
+/* One finger: the mouse, or a single touch point sent through the DevTools protocol. */
+async function makeFinger(page) {
+  if (!TOUCH) {
+    return {
+      down: async (x, y) => {
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+      },
+      move: (x, y) => page.mouse.move(x, y),
+      up: () => page.mouse.up(),
+      tap: (sel) => page.click(sel),
+    };
+  }
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type, x, y) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+  return {
+    down: (x, y) => send('touchStart', x, y),
+    move: (x, y) => send('touchMove', x, y),
+    up: () => send('touchEnd'),
+    tap: (sel) => page.tap(sel),
+  };
+}
+
+async function playLevel(page, finger, i) {
   const L = Sim.compile(LEVELS[i], i);
   const res = solve(L, L.gems.length > 0);
   if (res.error) throw new Error(`solver: ${res.error}`);
@@ -96,32 +134,46 @@ async function playLevel(page, i) {
   const scr = (p) => page.evaluate(([x, y]) => window.TMWYD.toScreen(x, y), [p.x, p.y]);
 
   const start = await scr(pts[0]);
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
+  await finger.down(start.x, start.y);
   for (const p of pts.slice(1)) {
     const s = await scr(p);
-    await page.mouse.move(s.x, s.y);
+    await finger.move(s.x, s.y);
   }
   // Keep pulling past the exit so the thief closes the lead and steps onto it.
   const last = pts[pts.length - 1];
   for (let d = 4; d <= 40; d += 4) {
     const s = await scr({ x: last.x + Math.cos(dir) * d, y: last.y + Math.sin(dir) * d });
-    await page.mouse.move(s.x, s.y);
+    await finger.move(s.x, s.y);
     if ((await page.evaluate(() => window.TMWYD.state().mode)) !== 'play') break;
   }
-  await page.mouse.up();
+  await finger.up();
   const st = await page.evaluate(() => window.TMWYD.state());
   return { st, solverT: res.t };
 }
 
 (async () => {
   const server = await serve();
-  const url = `http://127.0.0.1:${server.address().port}/index.html`;
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const url = `${origin}/index.html`;
   const browser = await chromium.launch(
     fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {}
   );
-  // A large viewport keeps rounding of mouse coordinates well under a world pixel.
-  const page = await browser.newPage({ viewport: { width: 1200, height: 1900 } });
+  // Desktop: a large window keeps mouse rounding well under a world pixel.
+  // Touch: a typical Android phone (412 x 915 CSS px).
+  const context = await browser.newContext(
+    TOUCH
+      ? { viewport: { width: 412, height: 915 }, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true }
+      : { viewport: { width: 1200, height: 1900 } }
+  );
+  const blocked = [];
+  await context.route('**/*', (route) => {
+    const u = route.request().url();
+    if (u.startsWith(origin + '/')) return route.continue();
+    blocked.push(u);
+    return route.abort();
+  });
+  const page = await context.newPage();
+  const finger = await makeFinger(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   // Network failures (fonts offline or behind a proxy) don't break the game; script errors do.
@@ -129,13 +181,18 @@ async function playLevel(page, i) {
   await page.goto(url);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.click('#menu-grid .card');
+  await page.evaluate(() => document.fonts.ready);
+  const fontsOk = await page.evaluate(
+    () => document.fonts.check('900 40px "Big Shoulders Display"') && document.fonts.check('600 14px "IBM Plex Mono"')
+  );
+  console.log(`${TOUCH ? 'touch, 412x915' : 'mouse, 1200x1900'} · serving ${path.relative(process.cwd(), ROOT) || '.'}`);
+  await finger.tap('#menu-grid .card');
 
   let failed = 0;
   for (let i = 0; i < LEVELS.length; i++) {
     const name = `${String(i + 1).padStart(2)} ${LEVELS[i].name.padEnd(18)}`;
     try {
-      const { st, solverT } = await playLevel(page, i);
+      const { st, solverT } = await playLevel(page, finger, i);
       const drift = st.t - solverT;
       const ok = st.mode === 'won' && st.loot.every(Boolean) && st.gems.every(Boolean);
       console.log(`${name} ${ok ? 'escaped' : `FAILED (${st.mode})`}  game ${st.t.toFixed(2)}s  solver ${solverT.toFixed(2)}s  drift ${drift >= 0 ? '+' : ''}${drift.toFixed(2)}s`);
@@ -151,13 +208,13 @@ async function playLevel(page, i) {
           localStorage.setItem(key, JSON.stringify(d));
         }, i);
         await page.reload();
-        if (i + 1 < LEVELS.length) await page.click(`#menu-grid .card:nth-child(${i + 2})`);
+        if (i + 1 < LEVELS.length) await finger.tap(`#menu-grid .card:nth-child(${i + 2})`);
         continue;
       }
       await page.waitForSelector('#results:not([hidden])');
       await page.waitForTimeout(400);
       if (shotsDir) await page.screenshot({ path: path.join(shotsDir, `heist-${i + 1}.png`) });
-      await page.click('#btn-next');
+      if (i + 1 < LEVELS.length) await finger.tap('#btn-next');
     } catch (e) {
       failed++;
       console.log(`${name} ERROR ${e.message}`);
@@ -165,6 +222,22 @@ async function playLevel(page, i) {
     }
   }
 
+  // The hooks the Android shell calls: back leaves a heist, and on the menu lets the app close.
+  const backFromHeist = await page.evaluate(() => window.TMWYD.back());
+  const backFromMenu = await page.evaluate(() => window.TMWYD.back());
+  const pauseOk = await page.evaluate(() => typeof window.TMWYD.pause === 'function');
+  const checks = [
+    ['bundled fonts load', fontsOk],
+    ['back leaves a heist', backFromHeist === true],
+    ['back on the menu closes the app', backFromMenu === false],
+    ['pause hook exists', pauseOk],
+    ['no network requests', blocked.length === 0],
+  ];
+  for (const [label, ok] of checks) {
+    console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${label}`);
+    if (!ok) failed++;
+  }
+  if (blocked.length) console.log('Blocked requests:\n  ' + blocked.join('\n  '));
   if (errors.length) {
     console.log('Page errors:\n  ' + errors.join('\n  '));
     failed++;

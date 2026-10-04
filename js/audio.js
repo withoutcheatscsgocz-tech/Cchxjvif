@@ -90,6 +90,10 @@
 
   const Sfx = {
     unlock,
+    /* Silence everything while the page is hidden; the next touch resumes it. */
+    suspend() {
+      if (ac && ac.state === 'running') ac.suspend().catch(() => {});
+    },
     get enabled() {
       return enabled;
     },

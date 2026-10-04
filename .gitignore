@@ -1,3 +1,4 @@
 node_modules/
 playtest-shots/
+dist/
 .DS_Store
