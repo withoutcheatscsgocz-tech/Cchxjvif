@@ -6,6 +6,8 @@
   "scripts": {
     "solve": "node tools/solve.js",
     "playtest": "node tools/playtest.js",
+    "build:web": "node tools/build-web.js",
+    "playtest:web": "node tools/build-web.js && node tools/playtest.js --root dist/web --touch --iframe 450x800",
     "test": "node tools/solve.js && node tools/playtest.js"
   },
   "devDependencies": {

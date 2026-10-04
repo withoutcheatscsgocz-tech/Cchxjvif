@@ -80,19 +80,86 @@ unzip -q app-release.apk 'assets/web/*' -d /tmp/apk
 node tools/playtest.js --root /tmp/apk/assets/web --touch
 ```
 
+## itch.io
+
+The browser version goes on itch.io as an HTML5 game, with the APK as an
+extra Android download. `itch/PAGE.md` walks through the itch.io dashboard
+field by field (embed settings, tags, description, images); this section
+covers the files.
+
+**Build the web zip.**
+
+```sh
+npm run build:web    # → dist/web/ and dist/time-moves-when-you-draw-web-<version>.zip
+npm run playtest:web # build, then play every heist inside a 450 × 800 iframe
+```
+
+The build is `index.html`, `js/` and `fonts/`, with one change: scripts,
+stylesheet and fonts are linked as `file?v=<hash>`, because itch.io caches
+them for a month and only refreshes `index.html`. It stops with an error if
+itch.io would reject or break the build (index.html not at the root, over
+1,000 files, paths over 240 characters, absolute or wrong-case links,
+anything loaded from another server). The zip is reproducible: same sources,
+same bytes. `--iframe 450x800` plays the game the way itch.io embeds it: in a
+frame of that size on a page from another origin, behind a "Run game" click,
+with itch's fullscreen button over the corner.
+
+**Upload by hand.** Create the page with *Kind of project* set to HTML,
+upload the zip and tick *This file will be played in the browser*. Embed it
+at 450 × 800 with *Mobile friendly* on (Portrait), the fullscreen button on,
+and click to launch. Add `time-moves-when-you-draw-<version>.apk` (from the
+`time-moves-when-you-draw-apk` artifact) as a second file with only
+*Android* ticked.
+
+**Or let CI publish it.** The `itch` job in the *Android APK* workflow runs
+after the APK job on `v*` tags and manual runs. It builds the web version,
+plays it in the itch-style frame, then uses
+[butler](https://itch.io/docs/butler/) to push it to the `html5` channel and
+the APK to the `android` channel, both labelled with the `package.json`
+version. To turn it on:
+
+1. Create the itch.io page first (butler can't), with *Kind of project* set
+   to HTML, and keep it a draft. Don't also upload a zip by hand; if you
+   did, delete it so the butler upload is the one that plays.
+2. Get an API key: run `butler login` once on your computer and copy the key
+   from `~/.config/itch/butler_creds`, or copy the `wharf` key from
+   [itch.io/user/settings/api-keys](https://itch.io/user/settings/api-keys).
+3. In the GitHub repo, *Settings → Secrets and variables → Actions*: add the
+   secret `BUTLER_API_KEY`, and the variable `ITCH_GAME` set to
+   `<itch-username>/time-moves-when-you-draw` (the page's address is
+   `https://<itch-username>.itch.io/time-moves-when-you-draw`).
+4. Bump the version in `package.json` and push a matching tag:
+   `git tag v1.0.0 && git push origin v1.0.0`.
+5. After the first push only: on the page's edit screen, tick *This file
+   will be played in the browser* on the `html5` upload, then set up the
+   embed as above. Later pushes to the same channel should keep it; check
+   the page after the second release.
+
+Until the secret and the variable exist, the job still builds and checks the
+web version (artifact `time-moves-when-you-draw-web`) and skips the upload
+with a notice.
+
+Stars are kept per browser, so the itch.io page, a GitHub Pages copy and the
+app each have their own. itch.io runs the game in a third-party frame, so
+Safari (and every iPhone browser) and private windows may forget them when
+the browser closes; the app keeps them for good.
+
 ## How it works
 
 ```
-index.html        page, HUD, menu and result sheets (CSS inline)
-js/sim.js         the rules: map, collisions, sightlines, guard/camera/laser timelines
-js/levels.js      the 8 heists (ASCII maps + patrol data)
-js/audio.js       synthesized sound (Web Audio, no files)
-js/game.js        input, game loop, canvas rendering, screens
-fonts/            Big Shoulders Display + IBM Plex Mono (OFL), bundled for offline play
-android/          the Android app (WebView shell, Gradle project)
-tools/solve.js    proves every heist is beatable and suggests par times
-tools/playtest.js plays every heist in headless Chromium along the solver's route,
-                  offline, with mouse or touch (--touch)
+index.html         page, HUD, menu and result sheets (CSS inline)
+js/sim.js          the rules: map, collisions, sightlines, guard/camera/laser timelines
+js/levels.js       the 8 heists (ASCII maps + patrol data)
+js/audio.js        synthesized sound (Web Audio, no files)
+js/game.js         input, game loop, canvas rendering, screens
+fonts/             Big Shoulders Display + IBM Plex Mono (OFL), bundled for offline play
+android/           the Android app (WebView shell, Gradle project)
+itch/              the itch.io page: dashboard guide (PAGE.md), copy, cover, screenshots
+tools/solve.js     proves every heist is beatable and suggests par times
+tools/playtest.js  plays every heist in headless Chromium along the solver's route,
+                   offline, with mouse or touch (--touch), optionally inside an
+                   itch.io-style iframe (--iframe 450x800)
+tools/build-web.js builds the web version for itch.io: dist/web/ and a zip
 ```
 
 Everything that can catch you is a **pure function of game time** (`sim.js`).
