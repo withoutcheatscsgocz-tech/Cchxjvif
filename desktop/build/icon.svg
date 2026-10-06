@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="512" height="512">
+  <!-- The Android launcher icon (android/app/src/main/res/drawable/ic_launcher_foreground.xml)
+       on a rounded ink square: a drawn route (red) leading away from the masked thief (white). -->
+  <rect x="18" y="18" width="72" height="72" rx="15" fill="#121317"/>
+  <path d="M36,70 C44,56 54,74 62,58 C68,46 70,40 75,35" fill="none" stroke="#E5202B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="75" cy="35" r="5" fill="#E5202B"/>
+  <circle cx="34" cy="72" r="9" fill="#FFFFFF"/>
+  <rect x="26.5" y="69.2" width="15" height="5.6" rx="2.8" fill="#121317"/>
+  <circle cx="31.2" cy="72" r="1.5" fill="#FFFFFF"/>
+  <circle cx="36.8" cy="72" r="1.5" fill="#FFFFFF"/>
+</svg>

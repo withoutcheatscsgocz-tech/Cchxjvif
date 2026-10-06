@@ -1,0 +1,53 @@
+{
+  "name": "time-moves-when-you-draw-desktop",
+  "productName": "Time Moves When You Draw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A one-finger heist where the clock only runs while you draw.",
+  "author": "withoutcheatscsgocz-tech",
+  "repository": "github:withoutcheatscsgocz-tech/Cchxjvif",
+  "main": "main.js",
+  "scripts": {
+    "start": "node scripts/sync-web.js && electron .",
+    "dist:win": "node scripts/build-win.js",
+    "icon": "node scripts/make-icon.js"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "resedit": "3.1.0"
+  },
+  "build": {
+    "appId": "io.github.withoutcheatscsgocz_tech.timemoves",
+    "productName": "Time Moves When You Draw",
+    "executableName": "TimeMovesWhenYouDraw",
+    "copyright": "Copyright (c) 2026 withoutcheatscsgocz-tech",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "web/**",
+      "build/icon.png"
+    ],
+    "asar": true,
+    "electronLanguages": [
+      "en-US"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "artifactName": "TimeMovesWhenYouDraw-${version}-win-${arch}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "TimeMovesWhenYouDraw-${version}-portable.exe"
+    },
+    "publish": null,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false
+    }
+  }
+}

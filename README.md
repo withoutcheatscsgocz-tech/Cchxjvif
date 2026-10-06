@@ -81,6 +81,41 @@ unzip -q app-release.apk 'assets/web/*' -d /tmp/apk
 node tools/playtest.js --root /tmp/apk/assets/web --touch
 ```
 
+## Windows app
+
+`desktop/` packs the same game as a Windows program with
+[Electron](https://www.electronjs.org/): one window, no menu bar, the game
+served from `app://game/` (so stars are saved like on a website, in the
+Windows profile, and survive updates), every network request refused, and
+Node.js out of the page's reach. F11 or Alt+Enter switches fullscreen, and
+the window remembers its size and place. It brings its own Chromium, so it
+plays exactly like the browser version the playtests check, at the cost of
+size: about 90 MB as a single portable `.exe`, 135 MB as a zip.
+
+**Get it.** Every push that changes the game, `desktop/` or `tools/` builds
+it in GitHub Actions on Windows (workflow *Windows app*, artifact
+`time-moves-when-you-draw-windows`), after playing every heist inside the
+finished `.exe`. A `v*` tag also attaches both files to the GitHub release.
+
+**Build it yourself**, on Windows, Linux or macOS (Wine not needed):
+
+```sh
+npm run build:win          # → desktop/dist/
+# TimeMovesWhenYouDraw-<version>-portable.exe   one file, runs without installing
+# TimeMovesWhenYouDraw-<version>-win-x64.zip    the app folder, for itch.io
+cd desktop && npm start    # or just run it from source (Windows, Linux, macOS)
+npm run playtest:desktop   # play every heist inside the app (Linux: under xvfb-run)
+```
+
+The version comes from the root `package.json`. The build writes the icon
+(`desktop/build/icon.svg`, rendered by `desktop/scripts/make-icon.js`) and the
+version details into the `.exe` itself.
+
+The `.exe` is not code-signed, so Windows SmartScreen says "Windows protected
+your PC" the first time; players click *More info* → *Run anyway*. Signing
+needs a code-signing certificate, which costs money; electron-builder can use
+one through its `CSC_LINK` and `CSC_KEY_PASSWORD` settings if you get one.
+
 ## itch.io
 
 The browser version goes on itch.io as an HTML5 game, with the APK as an
@@ -113,6 +148,10 @@ and click to launch. Add `time-moves-when-you-draw-<version>.apk` (from the
 GitHub release, or inside the zip GitHub gives you for the
 `time-moves-when-you-draw-apk` artifact) as a second file with only
 *Android* ticked.
+
+**Windows.** Upload `TimeMovesWhenYouDraw-<version>-win-x64.zip` with only
+*Windows* ticked, or let the *Windows app* workflow push it to the `windows`
+channel (same secret and variable as below).
 
 **Or let CI publish it.** The `itch` job in the *Android APK* workflow runs
 after the APK job on `v*` tags and manual runs. It builds the web version,
@@ -163,11 +202,13 @@ js/audio.js        synthesized sound (Web Audio, no files)
 js/game.js         input, game loop, canvas rendering, screens
 fonts/             Big Shoulders Display + IBM Plex Mono (OFL), bundled for offline play
 android/           the Android app (WebView shell, Gradle project)
+desktop/           the Windows app (Electron shell; also runs on Linux and macOS)
 itch/              the itch.io page: dashboard guide (PAGE.md), copy, cover, screenshots
 tools/solve.js     proves every heist is beatable and suggests par times
 tools/playtest.js  plays every heist in headless Chromium along the solver's route,
                    offline, with mouse or touch (--touch), optionally inside an
-                   itch.io-style iframe (--iframe 450x800)
+                   itch.io-style iframe (--iframe 450x800), or inside the desktop
+                   app (--electron)
 tools/build-web.js builds the web version for itch.io: dist/web/ and a zip
 ```
 

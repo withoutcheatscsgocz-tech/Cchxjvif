@@ -1,0 +1,132 @@
+name: Windows app
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'index.html'
+      - 'js/**'
+      - 'fonts/**'
+      - 'desktop/**'
+      - 'tools/**'
+      - 'package.json'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach the .exe and .zip to a GitHub release when a v* tag is pushed
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check every heist is beatable
+        run: node tools/solve.js
+
+      - name: Build the Windows app
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run dist:win
+
+      - name: Play every heist inside the packaged .exe
+        run: |
+          npm ci
+          node tools/playtest.js --electron desktop/dist/win-unpacked/TimeMovesWhenYouDraw.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: time-moves-when-you-draw-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+
+  itch:
+    needs: exe
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: itch-deploy-windows
+      cancel-in-progress: false
+    env:
+      ITCH_GAME: ${{ vars.ITCH_GAME }}
+      # Same butler as the Android APK workflow; upgrade both together.
+      BUTLER_VERSION: 15.31.0
+      BUTLER_SHA256: 4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c
+    steps:
+      - name: Check itch.io settings
+        id: gate
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }} # only checked for being set
+        run: |
+          missing=""
+          [ -n "$ITCH_GAME" ] || missing="the repository variable ITCH_GAME (<itch-username>/time-moves-when-you-draw)"
+          if [ -z "$BUTLER_API_KEY" ]; then
+            missing="${missing:+$missing and }the repository secret BUTLER_API_KEY"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::notice title=itch.io upload skipped::Set $missing in Settings > Secrets and variables > Actions to publish the Windows build to itch.io."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! [[ "$ITCH_GAME" =~ ^[A-Za-z0-9_-]+/[A-Za-z0-9_-]+$ ]]; then
+            echo "::error title=Bad ITCH_GAME::ITCH_GAME must look like <itch-username>/<page-slug> (no channel, no URL), got: $ITCH_GAME"
+            exit 1
+          fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.go == 'true'
+
+      - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          name: time-moves-when-you-draw-windows
+          path: dist
+
+      - name: Install butler
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/butler.zip" "https://broth.itch.zone/butler/linux-amd64/$BUTLER_VERSION/archive/default"
+          echo "$BUTLER_SHA256  $RUNNER_TEMP/butler.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/butler.zip" -d "$RUNNER_TEMP/butler"
+          chmod +x "$RUNNER_TEMP/butler/butler"
+          echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/butler/butler" -V
+
+      - name: Push to itch.io
+        if: steps.gate.outputs.go == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          zip="dist/TimeMovesWhenYouDraw-$version-win-x64.zip"
+          if [ ! -f "$zip" ]; then
+            echo "::error::$zip is not in the Windows artifact"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::warning::Tag $GITHUB_REF_NAME doesn't match package.json version $version; itch.io gets $version"
+          fi
+          # A folder, not the zip: butler then uploads only what changed between versions.
+          mkdir -p dist/windows
+          unzip -q "$zip" -d dist/windows
+          butler push dist/windows "$ITCH_GAME:windows" --userversion "$version"
+          butler status "$ITCH_GAME"

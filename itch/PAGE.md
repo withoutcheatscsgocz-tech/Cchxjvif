@@ -2,9 +2,9 @@
 
 ## Rychlý postup (česky)
 
-1. **Soubory.** `npm run build:web` vytvoří `dist/time-moves-when-you-draw-web-1.0.0.zip`. APK stáhni z GitHub Actions (artefakt `time-moves-when-you-draw-apk` je ZIP a uvnitř je `time-moves-when-you-draw-1.0.0.apk`).
+1. **Soubory.** `npm run build:web` vytvoří `dist/time-moves-when-you-draw-web-1.0.0.zip`. APK stáhni z GitHub Actions (artefakt `time-moves-when-you-draw-apk` je ZIP a uvnitř je `time-moves-when-you-draw-1.0.0.apk`). Windows verzi taky (workflow *Windows app*, artefakt `time-moves-when-you-draw-windows`, uvnitř `TimeMovesWhenYouDraw-1.0.0-win-x64.zip`), nebo ji postav sám: `npm run build:win`.
 2. **Nová stránka** na <https://itch.io/game/new>: název *Time Moves When You Draw*, adresa `time-moves-when-you-draw`, tagline z části „Short description or tagline“ níže, *Classification* = Games, *Kind of project* = **HTML**, *Release status* = Released, *Pricing* = No payments.
-3. **Nahrání.** ZIP nahraj a zaškrtni *This file will be played in the browser*. APK nahraj, nastav typ *Executable*, zaškrtni jen *Android* a do pokynů k instalaci vlož text z části „Uploads“. (Nebo nahrávání nech na CI přes butler, viz „Automatic uploads with butler“. Pak ručně nenahrávej nic.)
+3. **Nahrání.** ZIP nahraj a zaškrtni *This file will be played in the browser*. APK nahraj, nastav typ *Executable* a zaškrtni jen *Android*. Windows ZIP nahraj, nastav typ *Executable* a zaškrtni jen *Windows*. Do pokynů k instalaci vlož text z části „Uploads“. (Nebo nahrávání nech na CI přes butler, viz „Automatic uploads with butler“. Pak ručně nenahrávej nic.)
 4. **Embed:** *Embed in page*, 450 × 800, *Mobile friendly* zapnuto s orientací *Portrait*, *Fullscreen button* zapnuto, *Automatically start on page load* vypnuto, *Enable scrollbars* vypnuto, *SharedArrayBuffer support* vypnuto.
 5. **Popis:** v editoru popisu přepni na HTML (tlačítko `<>`) a vlož celý obsah `itch/description.html`. Zpátky do běžného editoru už nepřepínej. *Genre* = Puzzle, 10 tagů ze seznamu níže.
 6. **Generative AI disclosure:** **Yes** a zaškrtni Code, Graphics, Text & Dialog a Sound. **Metadata:** English, Touchscreen + Mouse, A few minutes a odkaz na zdrojový kód (tabulka „Metadata“).
@@ -21,6 +21,8 @@ Everything below follows the itch.io edit form roughly from top to bottom; itch 
 | --- | --- | --- |
 | `dist/time-moves-when-you-draw-web-1.0.0.zip` | Browser build, `index.html` at the zip root, 14 files, about 150 KB | `npm run build:web` (or `npm run playtest:web` to build it and play every heist in a 450 × 800 itch-style frame; that needs `npm ci` and `npx playwright install chromium` first). CI also keeps it as the artifact `time-moves-when-you-draw-web` on `v*` tags and manual runs. |
 | `dist/time-moves-when-you-draw-1.0.0.apk` | Android app, about 170 KB, Android 8.0+ | GitHub Actions, workflow *Android APK*, artifact `time-moves-when-you-draw-apk` (a zip; the APK is inside). A `v*` tag also attaches it to a GitHub release. Building locally gives `android/app/build/outputs/apk/release/app-release.apk`; rename it. |
+| `TimeMovesWhenYouDraw-1.0.0-win-x64.zip` | Windows app, 64-bit, Windows 10 and 11, about 135 MB (the game plus the Chromium it runs in) | GitHub Actions, workflow *Windows app*, artifact `time-moves-when-you-draw-windows`; a `v*` tag also attaches it to a GitHub release. Or `npm run build:win` on any OS, which writes it to `desktop/dist/`. |
+| `TimeMovesWhenYouDraw-1.0.0-portable.exe` | The same Windows app as one self-unpacking .exe, about 90 MB | Next to the zip. Optional on itch.io: the zip is enough, and the itch.io app installs zips more neatly. |
 | `itch/cover.png` | Cover, 630 × 500 (exactly 315:250) | in the repo |
 | `itch/banner.png` | Page banner with the title. The file is 1920 × 560 (2× for sharp text); itch shows it at 960 × 280, the width of its page column | in the repo |
 | `itch/gameplay.gif` | Heist 3, Blind Spots: drawn, frozen, escaped, replayed. 360 × 672, about 2 MB. The grey finger dot and the caption bar under the map were added for the GIF and are not part of the game. | in the repo |
@@ -82,12 +84,16 @@ Skip this step if CI uploads with butler.
 
 1. **Upload** `time-moves-when-you-draw-web-1.0.0.zip`. Tick **This file will be played in the browser**. Don't tick any platform box for it.
 2. **Upload** `time-moves-when-you-draw-1.0.0.apk`. Set its type to **Executable** and tick **Android** only. Never tick Windows, macOS or Linux: itch asks you to tick only platforms the file runs on directly.
-3. In the **download & install instructions** box, paste:
+3. **Upload** `TimeMovesWhenYouDraw-1.0.0-win-x64.zip`. Set its type to **Executable** and tick **Windows** only. (Add the portable `.exe` the same way if you want to offer both.)
+4. In the **download & install instructions** box, paste:
 
    ```
    Android app: Android 8.0 or newer, about 170 KB.
    Download the .apk on your phone and open it. Android asks once whether your browser (or file manager) may install apps: allow it, then tap Install. Play Protect may warn about an unknown developer, because the app is not on Google Play. The app needs no internet permission.
    A newer version installs over the old one and keeps your stars.
+
+   Windows app: Windows 10 or 11, 64-bit.
+   Unpack the zip anywhere and run TimeMovesWhenYouDraw.exe. Nothing gets installed. Windows may show "Windows protected your PC" because the program isn't signed: click "More info", then "Run anyway". F11 switches fullscreen. Your stars are kept in your Windows profile, so a newer version keeps them.
    ```
 
 The last sentence holds while every build is signed with the same key. CI and local builds use the committed `android/app/debug.keystore`. If you ever switch to your own release key (the `ANDROID_KEYSTORE_BASE64` secret and the three that go with it), the key changes: players must uninstall the old app first, and uninstalling deletes their stars. Pick a key before you share builds widely (README, *Signing*).
@@ -263,6 +269,7 @@ The *Android APK* workflow has an `itch` job that runs after the APK job on `v*`
 3. In the GitHub repository, *Settings → Secrets and variables → Actions*: add the **secret** `BUTLER_API_KEY` and the **variable** `ITCH_GAME` set to `<itch-username>/time-moves-when-you-draw`.
 4. Push a tag that matches `version` in `package.json`. For the first release that is already `1.0.0`: `git tag v1.0.0 && git push origin v1.0.0`. For later releases, raise `version` first, then tag. (Or start the workflow by hand from the *Actions* tab.)
 5. After the first push only: on the edit page, tick **This file will be played in the browser** on the `html5` upload and save. The `android` upload is tagged Android automatically from the channel name. Then set up the embed options as above.
+6. The *Windows app* workflow does the same for Windows: on the same tag it builds the app on a Windows machine, plays every heist inside the finished `.exe`, and pushes it to the **windows** channel, which itch tags as Windows by itself. It uses the same secret and variable.
 
 Until the secret and the variable exist, the job still builds and checks the web version and skips the upload with a notice. After the second release, check that the `html5` upload is still the one that plays.
 
@@ -272,6 +279,7 @@ Until the secret and the variable exist, the job still builds and checks the web
 - [ ] Classification Games, kind HTML, Released, pricing chosen
 - [ ] Web zip uploaded and marked *played in the browser*, by hand or through the `html5` channel, and only one of them
 - [ ] APK uploaded with only *Android* ticked, install instructions pasted
+- [ ] Windows zip uploaded with only *Windows* ticked (by hand or through the `windows` channel)
 - [ ] Embed: 450 × 800, Mobile friendly + Portrait, fullscreen button on, click to launch, scrollbars off, SharedArrayBuffer off
 - [ ] Description pasted in HTML mode; the six section titles render as headers; the GitHub and Google Fonts links work
 - [ ] Genre Puzzle, 10 tags, no AI or title tags

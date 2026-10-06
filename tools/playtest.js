@@ -17,6 +17,11 @@
  *                                          play inside a 450 x 800 iframe on a host page
  *                                          from another origin, the way itch.io embeds it
  *   node tools/playtest.js --shots out/    also save a screenshot per heist
+ *   node tools/playtest.js --electron desktop
+ *                                          play inside the desktop app (desktop/main.js run by
+ *                                          the Electron from desktop/node_modules)
+ *   node tools/playtest.js --electron "desktop/dist/win-unpacked/TimeMovesWhenYouDraw.exe"
+ *                                          play inside a packaged app (on Windows in CI)
  *
  * Every request that isn't the game's own files is blocked and reported, so a
  * pass also proves the game runs offline (as it must inside the Android app).
@@ -33,6 +38,11 @@
  * partitioned the way Chrome does it (see launchBrowser). With --touch the window is tablet-sized:
  * iPads get itch's in-page embed, phones get a fullscreen frame instead (try
  * --iframe 412x915 for that). Works with --root, --touch and --shots.
+ *
+ * --electron launches the app with a throwaway profile and checks what the app
+ * shell adds: the game is served from app://game/ with Node.js out of reach, the
+ * network is refused, popups are blocked, and stars survive closing and
+ * reopening the app. On Linux it needs a display (xvfb-run).
  *
  * Needs Playwright (npm i -D playwright, or a global install).
  */
@@ -58,6 +68,7 @@ const opt = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : null
 const ROOT = path.resolve(opt('--root') || path.join(__dirname, '..'));
 const TOUCH = args.includes('--touch');
 const shotsDir = opt('--shots');
+const ELECTRON = opt('--electron');
 const FRAME = (() => {
   if (!args.includes('--iframe')) return null;
   const m = /^(\d+)x(\d+)$/.exec(opt('--iframe') || '');
@@ -304,6 +315,46 @@ async function playLevel(page, game, finger, i) {
   return { st, solverT: res.t };
 }
 
+/* Every heist in order along the solver's route; returns how many failed. */
+async function playAll(page, game, finger, reloadGame) {
+  let failed = 0;
+  for (let i = 0; i < LEVELS.length; i++) {
+    const name = `${String(i + 1).padStart(2)} ${LEVELS[i].name.padEnd(18)}`;
+    try {
+      const { st, solverT } = await playLevel(page, game, finger, i);
+      const drift = st.t - solverT;
+      const ok = st.mode === 'won' && st.loot.every(Boolean) && st.gems.every(Boolean);
+      console.log(`${name} ${ok ? 'escaped' : `FAILED (${st.mode})`}  game ${st.t.toFixed(2)}s  solver ${solverT.toFixed(2)}s  drift ${drift >= 0 ? '+' : ''}${drift.toFixed(2)}s`);
+      if (!ok) {
+        failed++;
+        if (shotsDir) await page.screenshot({ path: path.join(shotsDir, `fail-${i + 1}.png`) });
+        // Skip ahead so the remaining heists still get played.
+        await page.keyboard.press('Escape');
+        await game.evaluate(
+          ([n, key]) => {
+            const d = JSON.parse(localStorage.getItem(key) || '{}');
+            d.stars = Object.assign(d.stars || {}, { [n]: 1 });
+            localStorage.setItem(key, JSON.stringify(d));
+          },
+          [i, SAVE_KEY]
+        );
+        await reloadGame();
+        if (i + 1 < LEVELS.length) await finger.tap(`#menu-grid .card:nth-child(${i + 2})`);
+        continue;
+      }
+      await game.waitForSelector('#results:not([hidden])');
+      await game.waitForTimeout(400);
+      if (shotsDir) await page.screenshot({ path: path.join(shotsDir, `heist-${i + 1}.png`) });
+      if (i + 1 < LEVELS.length) await finger.tap('#btn-next');
+    } catch (e) {
+      failed++;
+      console.log(`${name} ERROR ${e.message}`);
+      break;
+    }
+  }
+  return failed;
+}
+
 /* --iframe: which result-sheet buttons does itch's fullscreen button overlap, and is each one's
  * centre still the game's? */
 async function sheetVsFullscreenButton(page, game) {
@@ -336,7 +387,111 @@ async function sheetVsFullscreenButton(page, game) {
   return out;
 }
 
+/* --electron: the desktop app, from its source folder or as a packaged executable. */
+async function runElectron(target) {
+  const { _electron } = require('playwright');
+  const os = require('os');
+  const full = path.resolve(target);
+  const fromSource = fs.statSync(full).isDirectory();
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'tmwyd-profile-'));
+  const extra = process.platform === 'linux' && process.getuid && process.getuid() === 0 ? ['--no-sandbox'] : [];
+  const launchOpts = fromSource
+    ? {
+        executablePath: require(path.join(full, 'node_modules', 'electron')),
+        args: [full, `--user-data-dir=${userData}`, ...extra],
+      }
+    : { executablePath: full, args: [`--user-data-dir=${userData}`, ...extra] };
+  if (fromSource) require(path.join(full, 'scripts', 'sync-web.js')).sync(); // the app serves desktop/web/
+
+  const external = [];
+  const errors = [];
+  let probing = false; // the deliberate fetch below logs a blocked-request error of its own
+  const open = async () => {
+    const app = await _electron.launch(launchOpts);
+    const page = await app.firstWindow();
+    page.on('request', (r) => {
+      if (!r.url().startsWith('app://game/')) external.push(r.url());
+    });
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => m.type() === 'error' && !probing && errors.push(m.text()));
+    await page.waitForFunction(() => !!window.TMWYD);
+    await page.evaluate(() => document.fonts.ready);
+    return { app, page };
+  };
+
+  let { app, page } = await open();
+  const info = await page.evaluate(() => ({
+    url: location.href,
+    title: document.title,
+    size: [innerWidth, innerHeight],
+    node: typeof require !== 'undefined' || typeof process !== 'undefined',
+    embedded: document.documentElement.classList.contains('embedded'),
+  }));
+  const fontsOk = await page.evaluate(
+    () => document.fonts.check('900 40px "Big Shoulders Display"') && document.fonts.check('600 14px "IBM Plex Mono"')
+  );
+  console.log(`electron, ${fromSource ? 'from source' : 'packaged'} · ${path.relative(process.cwd(), full) || '.'} · window ${info.size.join('x')}`);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => !!window.TMWYD);
+  const finger = await makeFinger(page);
+  await finger.tap('#menu-grid .card');
+  let failed = await playAll(page, page, finger, async () => {
+    await page.reload();
+    await page.waitForFunction(() => !!window.TMWYD);
+  });
+
+  const backFromHeist = await page.evaluate(() => window.TMWYD.back());
+  const backFromMenu = await page.evaluate(() => window.TMWYD.back());
+  const quiet = external.length === 0;
+  // Try to leave on purpose: both must be refused by the app, not by this test.
+  probing = true;
+  const fetchRefused = await page.evaluate(() => fetch('https://example.com/').then(() => false, () => true));
+  const popupRefused = await page.evaluate(() => window.open('https://example.com/') === null);
+  const windows = app.windows().length;
+  probing = false;
+  await app.close();
+
+  ({ app, page } = await open());
+  const kept = await page.evaluate((key) => {
+    try {
+      const stars = JSON.parse(localStorage.getItem(key) || '{}').stars || {};
+      return Object.keys(stars).filter((k) => stars[k] & 1).length;
+    } catch (e) {
+      return -1;
+    }
+  }, SAVE_KEY);
+  const shown = (await page.textContent('#menu-stars')).trim();
+  await app.close();
+  fs.rmSync(userData, { recursive: true, force: true });
+
+  const checks = [
+    ['bundled fonts load', fontsOk],
+    [`served from app://game/ (${info.url})`, info.url === 'app://game/index.html'],
+    [`window title (${info.title})`, info.title === 'Time Moves When You Draw'],
+    ['the page cannot reach Node.js', !info.node],
+    ['not treated as embedded', !info.embedded],
+    ['back leaves a heist', backFromHeist === true],
+    ['back on the menu closes the app', backFromMenu === false],
+    ['no network requests while playing', quiet],
+    ['network refused by the app', fetchRefused],
+    ['popups refused by the app', popupRefused && windows === 1],
+    [`stars survive restarting the app (${kept}/${LEVELS.length} escaped, menu shows "${shown}")`, kept === LEVELS.length],
+  ];
+  for (const [label, ok] of checks) {
+    console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${label}`);
+    if (!ok) failed++;
+  }
+  if (!quiet) console.log('Requests outside app://game/:\n  ' + external.join('\n  '));
+  if (errors.length) {
+    console.log('Page errors:\n  ' + errors.join('\n  '));
+    failed++;
+  }
+  process.exit(failed ? 1 : 0);
+}
+
 (async () => {
+  if (ELECTRON) return runElectron(ELECTRON);
   const server = await serve();
   const origin = `http://127.0.0.1:${server.address().port}`;
   const url = `${origin}/index.html`;
@@ -421,41 +576,7 @@ async function sheetVsFullscreenButton(page, game) {
   console.log(`${where} · serving ${path.relative(process.cwd(), ROOT) || '.'}`);
   await finger.tap('#menu-grid .card');
 
-  let failed = 0;
-  for (let i = 0; i < LEVELS.length; i++) {
-    const name = `${String(i + 1).padStart(2)} ${LEVELS[i].name.padEnd(18)}`;
-    try {
-      const { st, solverT } = await playLevel(page, game, finger, i);
-      const drift = st.t - solverT;
-      const ok = st.mode === 'won' && st.loot.every(Boolean) && st.gems.every(Boolean);
-      console.log(`${name} ${ok ? 'escaped' : `FAILED (${st.mode})`}  game ${st.t.toFixed(2)}s  solver ${solverT.toFixed(2)}s  drift ${drift >= 0 ? '+' : ''}${drift.toFixed(2)}s`);
-      if (!ok) {
-        failed++;
-        if (shotsDir) await page.screenshot({ path: path.join(shotsDir, `fail-${i + 1}.png`) });
-        // Skip ahead so the remaining heists still get played.
-        await page.keyboard.press('Escape');
-        await game.evaluate(
-          ([n, key]) => {
-            const d = JSON.parse(localStorage.getItem(key) || '{}');
-            d.stars = Object.assign(d.stars || {}, { [n]: 1 });
-            localStorage.setItem(key, JSON.stringify(d));
-          },
-          [i, SAVE_KEY]
-        );
-        await reloadGame();
-        if (i + 1 < LEVELS.length) await finger.tap(`#menu-grid .card:nth-child(${i + 2})`);
-        continue;
-      }
-      await game.waitForSelector('#results:not([hidden])');
-      await game.waitForTimeout(400);
-      if (shotsDir) await page.screenshot({ path: path.join(shotsDir, `heist-${i + 1}.png`) });
-      if (i + 1 < LEVELS.length) await finger.tap('#btn-next');
-    } catch (e) {
-      failed++;
-      console.log(`${name} ERROR ${e.message}`);
-      break;
-    }
-  }
+  let failed = await playAll(page, game, finger, reloadGame);
 
   // itch.io's fullscreen button floats over the frame's bottom-right corner, on top of the result sheet.
   const sheet = FRAME ? await sheetVsFullscreenButton(page, game) : null;
